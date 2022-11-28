@@ -25,6 +25,12 @@ export default function useOrders(props: Props) {
         );
         if (index !== -1) draft[index] = action.order;
         break;
+      case "updateCombined":
+          const combined_index = draft.findIndex(
+            (order) => order.orderId === action.order.orderId
+          );
+          if (combined_index !== -1) draft[combined_index] = action.order;
+          break;
       case "fill":
         //From the order get a placement remove it from the placements array and move it to the fills array
         const orderFillIndex = draft.findIndex(
@@ -33,9 +39,11 @@ export default function useOrders(props: Props) {
 
         if (action.executedQuantity) {
           draft[orderFillIndex].executedQuantity = action.executedQuantity;
+          draft[orderFillIndex].executedPrice = action.executedPrice;
         }
         if (action.status) {
           draft[orderFillIndex].status = action.status;
+          draft[orderFillIndex].executedPrice = action.executedPrice;
         }
 
         break;
@@ -65,6 +73,24 @@ export default function useOrders(props: Props) {
         type: "update",
         order: updatedOrder,
       });
+
+      
+    },
+    [dispatch]
+  );
+
+  const updateAndSend = useCallback(
+    (updatedCombinedOrder: Order) => {
+      dispatch({
+        type: "updateCombined",
+        order: updatedCombinedOrder,
+      });
+      //once this is done, broadcast it back.
+      broadcast({
+        type: "finsemble.order",
+         //@ts-ignore
+        order: { ...updatedCombinedOrder, destinationApp:updatedCombinedOrder.appName },
+      });
     },
     [dispatch]
   );
@@ -86,25 +112,28 @@ export default function useOrders(props: Props) {
 
       const xPercent = Number(targetQuantity) * 0.25;
 
-      broadcast({
-        type: "finsemble.order",
-        order: order,
-      });
+      // broadcast({
+      //   type: "finsemble.order",
+      //   order:order
+        
+      // });
 
       const fillOrder = (amount: number) => {
         let fillAmount = amount + xPercent;
 
-        if (fillAmount > targetQuantity || status === "FILLED") {
+        if (fillAmount > targetQuantity || status === "READY") {
           dispatch({
             type: "fill",
             orderId: order.orderId,
-            status: "FILLED",
+            status: "READY",
+            executedPrice:order.executedPrice
           });
-
-          // broadcast({
-          //   type: "finsemble.order",
-          //   order: { ...order },
-          // });
+         
+          broadcast({
+            type: "finsemble.order",
+             //@ts-ignore
+            order: { ...order, status:'READY', destinationApp:'combined' },
+          });
           return;
         }
 
@@ -113,7 +142,8 @@ export default function useOrders(props: Props) {
             type: "fill",
             orderId: order.orderId,
             executedQuantity: Math.round(fillAmount),
-            status: "WORKING",
+            status: "WORK",
+            executedPrice:order.executedPrice
           });
           fillOrder(fillAmount);
         }, 2000);
@@ -129,26 +159,26 @@ export default function useOrders(props: Props) {
    * If the draft state is !filled and the new state == filled then send Notification.
    *
    */
-  useEffect(() => {
-    const setUpChannelListener = async () => {
-      const channel = await getOrCreateChannel("orders");
-      const listener = channel.addContextListener(
-        "finsemble.order",
-        (context: OrderContext) => {
-          // only add orders if they come from a different app or if they come from the Combined blotter
-          if (!context.order || context?.order?.appName !== "combined") return;
+  // useEffect(() => {
+  //   const setUpChannelListener = async () => {
+  //     const channel = await getOrCreateChannel("orders");
+  //     const listener = channel.addContextListener(
+  //       "finsemble.order",
+  //       (context: OrderContext) => {
+  //         // only add orders if they come from a different app or if they come from the Combined blotter
+  //         if (!context.order || context?.order?.appName !== "combined") return;
 
-          addOrder(context.order);
-        }
-      );
-      return listener;
-    };
+  //         addOrder(context.order);
+  //       }
+  //     );
+  //     return listener;
+  //   };
 
-    const channelListener = setUpChannelListener();
-    return () => {
-      channelListener.then((listener) => listener.unsubscribe());
-    };
-  }, [addOrder]);
+  //   const channelListener = setUpChannelListener();
+  //   return () => {
+  //     channelListener.then((listener) => listener.unsubscribe());
+  //   };
+  // }, [addOrder]);
 
   return {
     orders,
@@ -156,11 +186,24 @@ export default function useOrders(props: Props) {
     updateFill,
     deleteOrder,
     updateOrder,
+    updateAndSend
   };
 }
 
-export const sendOrderToCombinedApp = (order: Order) =>
+export const sendOrderToCombinedApp = (order: Order) => 
   broadcast({
     type: "finsemble.order",
+    //@ts-ignore
     order: { ...order, destinationApp: "combined" },
   });
+
+  export const sendAccountingStatusToCombinedApp = (order: Order,updateOrder?:Function) => 
+  { 
+    updateOrder && updateOrder({...order,status: 'ACCT'});
+    broadcast({
+      type: "finsemble.order",
+      //@ts-ignore
+      order: { ...order, destinationApp: "combined", status:'ACCT' },
+    });
+  }
+  

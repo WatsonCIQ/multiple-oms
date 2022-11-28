@@ -10,7 +10,8 @@ export interface Order {
   broker: string;
   destinationApp?: string;
   duration: string;
-  executedQuantity: number | string;
+  executedQuantity: number;
+  executedPrice: string;
   instruction: string;
   limit: string;
   manager: string;
@@ -18,10 +19,10 @@ export interface Order {
   securityId: string | number;
   securityType: string;
   settlementDate: string | Date;
-  status: "NEW" | "OPEN" | "ACCNT" | "WORKING" | "FILLED";
+  status: "NEW" | "OPEN" | "ACCT" | "WORK" | "READY"|"EXECUTING"|"WAITING FOR ACK";
   targetAmount: string | number;
   targetPrice: string | number;
-  targetQuantity: string | number;
+  targetQuantity: number;
   ticker: string;
   tradeDate: string | Date;
   trader: string;
